@@ -53,17 +53,20 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
   # Both keys and values support sprintf formatting
   config :data_points, :validate => :hash, :default => {}, :required => true
 
-  # Allow the override of the `time` column in the event?
+  # Allow the override of the `timestamp` column in the event?
   #
-  # By default any column with a name of `time` will be ignored and the time will
+  # By default any column with a name of `timestamp` will be ignored and the time will
   # be determined by the value of `@timestamp`.
   #
-  # Setting this to `true` allows you to explicitly set the `time` column yourself
+  # Setting this to `true` allows you to explicitly set the `timestamp` column yourself
   #
-  # Note: **`time` must be an epoch value in either seconds, milliseconds or microseconds**
+  # Note: **`timestamp` must be an epoch value in either seconds, milliseconds or microseconds**
   config :allow_time_override, :validate => :boolean, :default => false
 
-  # Set the level of precision of `time`
+  # field to use to override `@timestamp`
+  config :timestamp_field, :validate => :string, :default => "time"
+
+  # Set the level of precision of `timestamp`
   #
   # only useful when overriding the time value
   config :time_precision, :validate => ["n", "u", "ms", "s", "m", "h"], :default => "ms"
@@ -117,9 +120,7 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
     require 'manticore'
     require 'cgi'
 
-    @client = Manticore::Client.new(retry_non_idempotent: true, stale_check: true)#  do |http_client_builder, request_builder|
-    #   http_client_builder.set_retry_handler LoggingNonStandardRetryHandler.new options.fetch(:automatic_retries, 3), options.fetch(:retry_non_idempotent, false)
-    # end
+    @client = Manticore::Client.new(retry_non_idempotent: true, stale_check: true)
     @queue = []
 
     @query_params = "db=#{@db}&rp=#{@retention_policy}&precision=#{@time_precision}&u=#{@user}&p=#{@password.value}"
@@ -146,15 +147,16 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
     # 
     # Since we'll be buffering them to send as a batch, we'll only collect
     # the values going into the points array
-    
-    time  = timestamp_at_precision(event.timestamp, @time_precision.to_sym)
+
+
     point = create_point_from_event(event)
 
-    if point.has_key?('time')
+    if point.has_key?(@timestamp_field) || point.has_key?("@timestamp")
       unless @allow_time_override
+        time  = timestamp_at_precision(event.timestamp, @time_precision.to_sym)
         logger.error("Cannot override value of time without 'allow_time_override'. Using event timestamp")
       else
-        time = point.delete("time")
+        time = point.delete(@timestamp_field)
       end
     end
 
