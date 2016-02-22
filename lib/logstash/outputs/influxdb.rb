@@ -191,7 +191,7 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
       @logger.warn("EOF while writing request or reading response header from InfluxDB",
                    :host => @host, :port => @port)
       return # abort this flush
-    rescue ManticoreException
+    rescue Manticore::ManticoreException
       sleep(@backoff)
       post(body)
     end
