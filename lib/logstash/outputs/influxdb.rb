@@ -25,6 +25,9 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
   # The retention policy to use
   config :retention_policy, :validate => :string, :default => "default"
 
+  # Whether to use https
+  config :ssl, :validate => :boolean, :default => false
+
   # The hostname or IP address to reach your InfluxDB instance
   config :host, :validate => :string, :required => true
 
@@ -36,6 +39,9 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
 
   # The password for the user who access to the named database
   config :password, :validate => :password, :default => nil
+
+  # How long to wait after a failure to retry
+  config :backoff, :validate => :number, :default => 5
 
   # Measurement name - supports sprintf formatting
   config :measurement, :validate => :string, :default => "logstash"
@@ -110,12 +116,14 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
   def register
     require 'manticore'
     require 'cgi'
-    
-    @client = Manticore::Client.new
+
+    @client = Manticore::Client.new(retry_non_idempotent: true, stale_check: true)#  do |http_client_builder, request_builder|
+    #   http_client_builder.set_retry_handler LoggingNonStandardRetryHandler.new options.fetch(:automatic_retries, 3), options.fetch(:retry_non_idempotent, false)
+    # end
     @queue = []
 
     @query_params = "db=#{@db}&rp=#{@retention_policy}&precision=#{@time_precision}&u=#{@user}&p=#{@password.value}"
-    @base_url = "http://#{@host}:#{@port}/write"
+    @base_url = "#{@ssl ? 'https' : 'http'}://#{@host}:#{@port}/write"
     @url = "#{@base_url}?#{@query_params}"
 
     buffer_initialize(
@@ -181,6 +189,9 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
       @logger.warn("EOF while writing request or reading response header from InfluxDB",
                    :host => @host, :port => @port)
       return # abort this flush
+    rescue ManticoreException
+      sleep(@backoff)
+      post(body)
     end
 
     if read_body?(response)
