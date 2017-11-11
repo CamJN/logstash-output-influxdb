@@ -217,10 +217,11 @@ class LogStash::Outputs::InfluxDB < LogStash::Outputs::Base
   # data before sending to the output pipeline
   def coerce_values!(event_data)
     @coerce_values.each do |column, value_type|
-      if event_data.has_key?(column)
+      k = event.sprintf(column)
+      if event_data.has_key?(k)
         begin
-          @logger.debug? and @logger.debug("Converting column #{column} to type #{value_type}: Current value: #{event_data[column]}")
-          event_data[column] = coerce_value(value_type, event_data[column])
+          @logger.debug? and @logger.debug("Converting column #{k} to type #{value_type}: Current value: #{event_data[k]}")
+          event_data[k] = coerce_value(value_type, event_data[k])
 
         rescue => e
           @logger.error("Unhandled exception", :error => e.message)
